@@ -2,7 +2,6 @@ package frrproxy
 
 import (
 	"context"
-	"net/http"
 
 	"github.com/alice-lg/alice-lg/pkg/api"
 )
@@ -52,37 +51,42 @@ func (src *SingleTableFrrProxy) Status(context.Context) (*api.StatusResponse, er
 	panic("unimplemented")
 }
 
-// AllRoutes retrieves a route dump
-func (src *SingleTableFrrProxy) AllRoutes(
-	ctx context.Context,
-) (*api.RoutesResponse, error) {
-	// First fetch all routes from the configured "main_table"
-	mainTable := src.GenericFrrProxy.config.MainTable
-
-	// Routes received
-	routes := make(map[string]*http.Response)
-	for _, ipVersion := range []string{"ipv4", "ipv6"} {
-		res, err := src.client.RunCommand(ctx, "bgpd", "show bgp vrf "+mainTable+" "+ipVersion)
-		if err != nil {
-			return nil, err
-		}
-		defer res.Body.Close()
-
-		routes[ipVersion] = res
-	}
-
-	meta, frrImported, err := parseRoutesResponseStream(routes, src.config)
-	if err != nil {
-		return nil, err
-	}
-
-	response := &api.RoutesResponse{
-		Response: api.Response{
-			Meta: meta,
-		},
-		Imported: frrImported,
-		Filtered: api.Routes{}, // TODO filtered routes
-	}
-
-	return response, nil
+// Status implements FrrProxy.
+func (src *SingleTableFrrProxy) AllRoutes(context.Context) (*api.RoutesResponse, error) {
+	panic("unimplemented")
 }
+
+// AllRoutes retrieves a route dump
+// func (src *SingleTableFrrProxy) AllRoutes(
+// 	ctx context.Context,
+// ) (*api.RoutesResponse, error) {
+// 	// First fetch all routes from the configured "main_table"
+// 	mainTable := src.GenericFrrProxy.config.MainTable
+
+// 	// Routes received
+// 	routes := make(map[string]*http.Response)
+// 	for _, ipVersion := range []string{"ipv4", "ipv6"} {
+// 		res, err := src.client.RunCommand(ctx, "bgpd", "show bgp vrf "+mainTable+" "+ipVersion)
+// 		if err != nil {
+// 			return nil, err
+// 		}
+// 		defer res.Body.Close()
+
+// 		routes[ipVersion] = res
+// 	}
+
+// 	meta, frrImported, err := parseRoutesResponseStream(routes, src.config)
+// 	if err != nil {
+// 		return nil, err
+// 	}
+
+// 	response := &api.RoutesResponse{
+// 		Response: api.Response{
+// 			Meta: meta,
+// 		},
+// 		Imported: frrImported,
+// 		Filtered: api.Routes{}, // TODO filtered routes
+// 	}
+
+// 	return response, nil
+// }

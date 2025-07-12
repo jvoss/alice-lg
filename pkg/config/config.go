@@ -20,6 +20,7 @@ import (
 	"github.com/alice-lg/alice-lg/pkg/pools"
 	"github.com/alice-lg/alice-lg/pkg/sources"
 	"github.com/alice-lg/alice-lg/pkg/sources/birdwatcher"
+	"github.com/alice-lg/alice-lg/pkg/sources/frrproxy"
 	"github.com/alice-lg/alice-lg/pkg/sources/gobgp"
 	"github.com/alice-lg/alice-lg/pkg/sources/openbgpd"
 )
@@ -40,6 +41,9 @@ const (
 	// based route servers with a birdwatcher backend.
 	SourceTypeBird = "bird"
 
+	// SourceTypeFrrProxy indicates an frr-proxy based source
+	SourceTypeFrrProxy = "frr-proxy"
+
 	// SourceTypeGoBGP indicates a GoBGP based source.
 	SourceTypeGoBGP = "gobgp"
 
@@ -51,6 +55,10 @@ const (
 	// SourceBackendBirdwatcher is used to indicate that
 	// the source is using a birdwatcher interface.
 	SourceBackendBirdwatcher = "birdwatcher"
+
+	// SourceFrrProxy is used when the source is consuming
+	// the frr-proxy API server.
+	SourceBackendFrrProxy = "frr-proxy"
 
 	// SourceBackendGoBGP is used when the source is consuming
 	// a GoBGP daemon via grpc API.
@@ -196,6 +204,7 @@ type SourceConfig struct {
 	Type        string
 	Backend     string
 	Birdwatcher birdwatcher.Config
+	FrrProxy    frrproxy.Config
 	GoBGP       gobgp.Config
 	OpenBGPD    openbgpd.Config
 
@@ -243,6 +252,8 @@ func sourceBackendTypeFromConfig(section *ini.Section) (string, error) {
 	name := section.Name()
 	if strings.HasSuffix(name, "birdwatcher") {
 		return SourceBackendBirdwatcher, nil
+	} else if strings.HasSuffix(name, "frr-proxy") {
+		return SourceBackendFrrProxy, nil
 	} else if strings.HasSuffix(name, "gobgp") {
 		return SourceBackendGoBGP, nil
 	} else if strings.HasSuffix(name, "openbgpd-bgplgd") {
@@ -260,6 +271,8 @@ func sourceTypeFromBackendType(t string) string {
 	switch t {
 	case SourceBackendBirdwatcher:
 		return SourceTypeBird
+	case SourceBackendFrrProxy:
+		return SourceTypeFrrProxy
 	case SourceBackendGoBGP:
 		return SourceTypeGoBGP
 	case SourceBackendOpenBGPDStateServer:
@@ -806,6 +819,32 @@ func getSources(config *ini.File) ([]*SourceConfig, error) {
 				)
 			}
 
+		case SourceBackendFrrProxy:
+			sourceType := backendConfig.Key("type").MustString("")
+			mainTable := backendConfig.Key("main_table").MustString("master")
+
+			if sourceType != "single_table" &&
+				sourceType != "multi_table" {
+				log.Fatal("Configuration error (frrproxy source) unknown frrproxy type:", sourceType)
+			}
+
+			c := frrproxy.Config{
+				ID:   srcCfg.ID,
+				Name: srcCfg.Name,
+
+				Type:      sourceType,
+				MainTable: mainTable,
+			}
+
+			if err := backendConfig.MapTo(&c); err != nil {
+				return nil, err
+			}
+			srcCfg.FrrProxy = c
+
+			log.Println("Adding frr-proxy source",
+				c.Name, "of type", sourceType,
+			)
+
 		case SourceBackendGoBGP:
 			c := gobgp.Config{
 				ID:   srcCfg.ID,
@@ -1008,6 +1047,8 @@ func (cfg *SourceConfig) GetInstance() sources.Source {
 	switch cfg.Backend {
 	case SourceBackendBirdwatcher:
 		instance = birdwatcher.NewBirdwatcher(cfg.Birdwatcher)
+	case SourceBackendFrrProxy:
+		instance = frrproxy.NewFrrProxy(cfg.FrrProxy)
 	case SourceBackendGoBGP:
 		instance = gobgp.NewGoBGP(cfg.GoBGP)
 	case SourceBackendOpenBGPDStateServer:
