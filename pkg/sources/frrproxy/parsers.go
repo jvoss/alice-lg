@@ -9,6 +9,58 @@ import (
 	"github.com/alice-lg/alice-lg/pkg/pools"
 )
 
+func parseStatusResponse(body io.Reader) (*api.StatusResponse, error) {
+	status := &api.StatusResponse{}
+	dec := json.NewDecoder(body)
+	if err := dec.Decode(status); err != nil {
+		return nil, err
+	}
+	return status, nil
+}
+
+func parseNeighborsResponse(body io.Reader) (*api.NeighborsResponse, error) {
+	// FRR's `show bgp summary json` is a map of peers
+	var summary struct {
+		Peers map[string]interface{} `json:"peers"`
+	}
+	if err := json.NewDecoder(body).Decode(&summary); err != nil {
+		return nil, err
+	}
+
+	neighbors := api.Neighbors{}
+	for peerID, peerData := range summary.Peers {
+		data := peerData.(map[string]interface{})
+		neighbor := &api.Neighbor{
+			ID:          peerID,
+			Address:     peerID,
+			ASN:         decoders.Int(data["as"], 0),
+			State:       decoders.String(data["state"], "unknown"),
+			Description: decoders.String(data["description"], ""),
+			Uptime:      decoders.Int(data["peerUptimeMsec"], 0) / 1000,
+			Routes: &api.NeighborRoutes{
+				Imported: decoders.Int(data["pfxRcd"], 0),
+			},
+		}
+		neighbors = append(neighbors, neighbor)
+	}
+
+	return &api.NeighborsResponse{
+		Response:  api.Response{Meta: &api.Meta{}},
+		Neighbors: neighbors,
+	}, nil
+}
+
+func parseNeighborsStatusResponse(body io.Reader) (*api.NeighborsStatusResponse, error) {
+	res, err := parseNeighborsResponse(body)
+	if err != nil {
+		return nil, err
+	}
+	return &api.NeighborsStatusResponse{
+		Response:  res.Response,
+		Neighbors: res.Neighbors,
+	}, nil
+}
+
 func parseRouteData(
 	rdata map[string]interface{},
 	network string, // additional input from the parent key in "routes"

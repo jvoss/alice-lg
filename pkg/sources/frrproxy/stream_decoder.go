@@ -9,91 +9,104 @@ import (
 )
 
 func parseRoutesResponseStream(
-	body io.Reader,
+	readers map[string]io.Reader,
 	config Config,
 ) (*api.Meta, api.Routes, error) {
-
-	dec := json.NewDecoder(body)
 	meta := &api.Meta{}
 	routes := api.Routes{}
 
 	throttle := time.Duration(config.StreamParserThrottle) * time.Nanosecond
 
-	// Read opening JSON token (should be `{`)
-	tok, err := dec.Token()
-	if err != nil {
-		return nil, nil, err
-	}
-	if delim, ok := tok.(json.Delim); !ok || delim != '{' {
-		return nil, nil, io.ErrUnexpectedEOF
-	}
+	for _, body := range readers {
+		dec := json.NewDecoder(body)
 
-	// Stream over top-level JSON keys
-	for dec.More() {
+		// Read opening JSON token (should be `{`)
 		tok, err := dec.Token()
 		if err != nil {
 			return nil, nil, err
 		}
-
-		key, ok := tok.(string)
-		if !ok {
-			continue
+		if delim, ok := tok.(json.Delim); !ok || delim != '{' {
+			return nil, nil, io.ErrUnexpectedEOF
 		}
 
-		switch key {
-		case "routes":
-			// Expecting the routes object
-			if tok, err := dec.Token(); err != nil || tok != json.Delim('{') {
+		// Stream over top-level JSON keys
+		for dec.More() {
+			tok, err := dec.Token()
+			if err != nil {
 				return nil, nil, err
 			}
 
-			// Iterate over route prefixes
-			for dec.More() {
-				// Read prefix key
-				prefixTok, err := dec.Token()
-				if err != nil {
-					return nil, nil, err
-				}
-				prefix, ok := prefixTok.(string)
-				if !ok {
-					continue
-				}
+			key, ok := tok.(string)
+			if !ok {
+				continue
+			}
 
-				// Decode the list of path entries
-				var entries []map[string]interface{}
-				if err := dec.Decode(&entries); err != nil {
+			switch key {
+			case "routes":
+				// Expecting the routes object
+				if tok, err := dec.Token(); err != nil || tok != json.Delim('{') {
 					return nil, nil, err
 				}
 
-				for _, entry := range entries {
-					// Inject the prefix so parseRouteData can pick it up
-					entry["network"] = prefix
+				// Iterate over route prefixes
+				for dec.More() {
+					// Read prefix key
+					prefixTok, err := dec.Token()
+					if err != nil {
+						return nil, nil, err
+					}
+					prefix, ok := prefixTok.(string)
+					if !ok {
+						continue
+					}
 
-					// Throttle parsing to reduce CPU
-					time.Sleep(throttle)
+					// Decode the list of path entries
+					var entries []map[string]interface{}
+					if err := dec.Decode(&entries); err != nil {
+						return nil, nil, err
+					}
 
-					route := parseRouteData(entry, prefix, config, false)
-					if route != nil {
-						routes = append(routes, route)
+					for _, entry := range entries {
+						// Inject the prefix so parseRouteData can pick it up
+						entry["network"] = prefix
+
+						// Throttle parsing to reduce CPU
+						time.Sleep(throttle)
+
+						route := parseRouteData(entry, prefix, config, false)
+						if route != nil {
+							routes = append(routes, route)
+						}
 					}
 				}
-			}
 
-			// Expect closing '}' for routes
-			if tok, err := dec.Token(); err != nil || tok != json.Delim('}') {
-				return nil, nil, err
-			}
+				// Expect closing '}' for routes
+				if tok, err := dec.Token(); err != nil || tok != json.Delim('}') {
+					return nil, nil, err
+				}
+			case "routerId":
+				if err := dec.Decode(&meta.RouterID); err != nil {
+					return nil, nil, err
+				}
+			case "localAS":
+				if err := dec.Decode(&meta.LocalAS); err != nil {
+					return nil, nil, err
+				}
+			case "tableVersion":
+				if err := dec.Decode(&meta.Version); err != nil {
+					return nil, nil, err
+				}
+			case "vrfId", "vrfName", "defaultLocPrf":
+				// Skip values we don't need for API meta (yet)
+				if err := skipNext(dec); err != nil {
+					return nil, nil, err
+				}
 
-		case "tableVersion", "vrfId", "vrfName", "routerId", "defaultLocPrf", "localAS":
-			// Skip values we don't need for API meta (yet)
-			if err := skipNext(dec); err != nil {
-				return nil, nil, err
-			}
-
-		default:
-			// Ignore unknown keys
-			if err := skipNext(dec); err != nil {
-				return nil, nil, err
+			default:
+				// Ignore unknown keys
+				if err := skipNext(dec); err != nil {
+					return nil, nil, err
+				}
 			}
 		}
 	}
