@@ -20,6 +20,7 @@ type Client struct {
 	api        string
 	apiKey     string
 	httpClient *http.Client
+	afi        string
 }
 
 // NewClient creates a new client instance
@@ -42,6 +43,7 @@ func NewClient(conf Config) *Client {
 		api:        conf.API,
 		apiKey:     conf.APIKey,
 		httpClient: &http.Client{Transport: tr, Timeout: timeout},
+		afi:        conf.Afi,
 	}
 }
 

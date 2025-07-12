@@ -26,49 +26,47 @@ func (src *SingleTableFrrProxy) Neighbors(
 
 	var neighborsResponse = make(map[string]api.Neighbor, 0)
 
-	// Fetch neighbors from the configured "main_table" for each AFI
-	for _, ipVersion := range []string{"ipv4", "ipv6"} {
-		res, err := src.client.RunCommand(ctx, "bgpd", "show bgp vrf "+mainTable+" "+ipVersion+" neighbors")
-		if err != nil {
-			return nil, err
-		}
-		defer res.Body.Close()
+	// Fetch neighbors from the configured "main_table" for the configured AFI
+	res, err := src.client.RunCommand(ctx, "bgpd", "show bgp vrf "+mainTable+" "+src.client.afi+" neighbors")
+	if err != nil {
+		return nil, err
+	}
+	defer res.Body.Close()
 
-		bodyBytes, err := io.ReadAll(res.Body)
-		if err != nil {
-			return nil, err
-		}
+	bodyBytes, err := io.ReadAll(res.Body)
+	if err != nil {
+		return nil, err
+	}
 
-		var neighbors map[string]BgpNeighbor
+	var neighbors map[string]BgpNeighbor
 
-		err = json.Unmarshal(bodyBytes, &neighbors)
-		if err != nil {
-			return nil, err
-		}
+	err = json.Unmarshal(bodyBytes, &neighbors)
+	if err != nil {
+		return nil, err
+	}
 
-		for ip, info := range neighbors {
-			neighbor, exists := neighborsResponse[ip]
+	for ip, info := range neighbors {
+		neighbor, exists := neighborsResponse[ip]
 
-			if !exists {
-				neighbor = api.Neighbor{
-					ID:             PeerHash(info.RemoteAs, ip),
-					Address:        ip,
-					ASN:            int(info.RemoteAs),
-					State:          info.State(),
-					Description:    info.NbrDesc,
-					RoutesReceived: info.RoutesAccepted(), // TODO - there is no received total without querying each neighbor
-					RoutesFiltered: info.RoutesFiltered(),
-					RoutesExported: info.RoutesExported(),
-					RoutesAccepted: info.RoutesAccepted(),
-					Uptime:         time.Duration(info.BgpTimerUpMsec) * time.Millisecond,
-					LastError:      info.LastResetDueTo,
-					RouteServerID:  src.config.ID,
-					// Details:     <original json>, // TODO
-				}
+		if !exists {
+			neighbor = api.Neighbor{
+				ID:             PeerHash(info.RemoteAs, ip),
+				Address:        ip,
+				ASN:            int(info.RemoteAs),
+				State:          info.State(),
+				Description:    info.NbrDesc,
+				RoutesReceived: info.RoutesAccepted(), // TODO - there is no received total without querying each neighbor
+				RoutesFiltered: info.RoutesFiltered(),
+				RoutesExported: info.RoutesExported(),
+				RoutesAccepted: info.RoutesAccepted(),
+				Uptime:         time.Duration(info.BgpTimerUpMsec) * time.Millisecond,
+				LastError:      info.LastResetDueTo,
+				RouteServerID:  src.config.ID,
+				// Details:     <original json>, // TODO
 			}
-
-			neighborsResponse[ip] = neighbor
 		}
+
+		neighborsResponse[ip] = neighbor
 	}
 
 	for _, n := range neighborsResponse {

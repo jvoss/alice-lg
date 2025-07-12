@@ -21,6 +21,7 @@ type Config struct {
 
 	Type      string `ini:"type"`
 	MainTable string `ini:"main_table"`
+	Afi       string `ini:"afi"`
 	// PeerTablePrefix         string `ini:"peer_table_prefix"`
 	// PipeProtocolPrefix      string `ini:"pipe_protocol_prefix"`
 	// AltPipeProtocolPrefix   string `ini:"alt_pipe_protocol_prefix"`

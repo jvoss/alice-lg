@@ -821,7 +821,8 @@ func getSources(config *ini.File) ([]*SourceConfig, error) {
 
 		case SourceBackendFrrProxy:
 			sourceType := backendConfig.Key("type").MustString("")
-			mainTable := backendConfig.Key("main_table").MustString("master")
+			mainTable := backendConfig.Key("main_table").MustString("default")
+			afi := backendConfig.Key("afi").MustString("ipv4")
 
 			if sourceType != "single_table" &&
 				sourceType != "multi_table" {
@@ -834,6 +835,7 @@ func getSources(config *ini.File) ([]*SourceConfig, error) {
 
 				Type:      sourceType,
 				MainTable: mainTable,
+				Afi:       afi,
 			}
 
 			if err := backendConfig.MapTo(&c); err != nil {
