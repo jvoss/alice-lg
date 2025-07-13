@@ -19,9 +19,9 @@ type Config struct {
 	// ServerTimeExt   string `ini:"servertime_ext"`
 	// ShowLastReboot  bool   `ini:"show_last_reboot"`
 
-	Type      string `ini:"type"`
-	MainTable string `ini:"main_table"`
-	Afi       string `ini:"afi"`
+	Type string `ini:"type"`
+	Vrf  string `ini:"main_table"`
+	Afi  string `ini:"afi"`
 	// PeerTablePrefix         string `ini:"peer_table_prefix"`
 	// PipeProtocolPrefix      string `ini:"pipe_protocol_prefix"`
 	// AltPipeProtocolPrefix   string `ini:"alt_pipe_protocol_prefix"`

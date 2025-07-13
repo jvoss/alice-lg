@@ -821,21 +821,16 @@ func getSources(config *ini.File) ([]*SourceConfig, error) {
 
 		case SourceBackendFrrProxy:
 			sourceType := backendConfig.Key("type").MustString("")
-			mainTable := backendConfig.Key("main_table").MustString("default")
+			vrf := backendConfig.Key("vrf").MustString("default")
 			afi := backendConfig.Key("afi").MustString("ipv4")
-
-			if sourceType != "single_table" &&
-				sourceType != "multi_table" {
-				log.Fatal("Configuration error (frrproxy source) unknown frrproxy type:", sourceType)
-			}
 
 			c := frrproxy.Config{
 				ID:   srcCfg.ID,
 				Name: srcCfg.Name,
 
-				Type:      sourceType,
-				MainTable: mainTable,
-				Afi:       afi,
+				Type: sourceType,
+				Vrf:  vrf,
+				Afi:  afi,
 			}
 
 			if err := backendConfig.MapTo(&c); err != nil {
