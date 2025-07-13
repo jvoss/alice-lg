@@ -12,14 +12,15 @@ type BgpRouteData struct {
 }
 
 type BgpRoute struct {
-	AsPath     AsPath     `json:"asPath"`
-	Origin     string     `json:"origin"`
-	Bestpath   BestPath   `json:"bestpath"`
-	Metric     int        `json:"metric"`
-	LocPrf     int        `json:"locPrf"`
-	LastUpdate LastUpdate `json:"lastUpdate"`
-	Nexthops   []Nexthop  `json:"nexthops"`
-	Peer       Peer       `json:"peer"`
+	ImportedFrom string     `json:"importedFrom"`
+	AsPath       AsPath     `json:"asPath"`
+	Origin       string     `json:"origin"`
+	Bestpath     BestPath   `json:"bestpath"`
+	Metric       int        `json:"metric"`
+	LocPrf       int        `json:"locPrf"`
+	LastUpdate   LastUpdate `json:"lastUpdate"`
+	Nexthops     []Nexthop  `json:"nexthops"`
+	Peer         Peer       `json:"peer"`
 
 	// interface
 	// gateway

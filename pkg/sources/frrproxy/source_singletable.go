@@ -51,7 +51,7 @@ func (src *SingleTableFrrProxy) Neighbors(
 
 		if !exists {
 			neighbor = api.Neighbor{
-				ID:             PeerHash(ip),
+				ID:             PeerHash(src.config.ID, ip),
 				Address:        ip,
 				ASN:            int(info.RemoteAs),
 				State:          info.State(),
@@ -111,9 +111,9 @@ func (src *SingleTableFrrProxy) NeighborsStatus(
 		return nil, err
 	}
 
-	for ip, _ := range bgpSummary.Peers {
+	for ip := range bgpSummary.Peers {
 		ns := api.NeighborStatus{}
-		ns.ID = PeerHash(ip)
+		ns.ID = PeerHash(src.config.ID, ip)
 		ns.State = "up" // TODO
 		ns.Since = 5 * time.Second
 
@@ -159,7 +159,7 @@ func (src *SingleTableFrrProxy) Status(context.Context) (*api.StatusResponse, er
 	response.Status.Message = "status-message"
 	response.Status.RouterID = "1.2.3.4"
 	response.Status.Version = "version-string-here"
-	response.Status.Backend = "frr-proxy"
+	response.Status.Backend = "FRR"
 
 	// response := api.StatusResponse{
 	// 	Response: api.Response{
@@ -205,7 +205,7 @@ func (src *SingleTableFrrProxy) AllRoutes(
 		// log.Printf("Prefix: %s", prefix)
 
 		for _, data := range routeData {
-			if data.Peer.PeerID == "::" {
+			if data.ImportedFrom != "" {
 				// Do not process imported routes
 				continue
 			}
@@ -217,7 +217,7 @@ func (src *SingleTableFrrProxy) AllRoutes(
 			route.Type = pools.Types.Acquire([]string{"BGP"})
 
 			route.NeighborID = pools.Neighbors.Acquire(
-				PeerHash(data.Peer.PeerID))
+				PeerHash(src.config.ID, data.Peer.PeerID))
 
 			// Age
 			epoch := data.LastUpdate.Epoch
@@ -270,39 +270,3 @@ func (src *SingleTableFrrProxy) AllRoutes(
 
 	return response, nil
 }
-
-// func (src *SingleTableFrrProxy) AllRoutes(
-// 	ctx context.Context,
-// ) (*api.RoutesResponse, error) {
-// 	mainTable := src.GenericFrrProxy.config.MainTable
-
-// 	// Routes received
-// 	routes := make(map[string]*http.Response)
-// 	for _, ipVersion := range []string{"ipv4", "ipv6"} {
-// 		// First fetch all routes from the configured "main_table" for each AFI
-// 		res, err := src.client.RunCommand(ctx, "bgpd", "show bgp vrf "+mainTable+" "+ipVersion)
-// 		if err != nil {
-// 			return nil, err
-// 		}
-// 		defer res.Body.Close()
-
-// 		routes[ipVersion] = res
-// 	}
-
-// 	// meta, frrImported, err := parseRoutesResponseStream(routes, src.config)
-// 	// if err != nil {
-// 	// 	return nil, err
-// 	// }
-
-// 	response := &api.RoutesResponse{
-// 		Response: api.Response{
-// 			// Meta: meta,
-// 			Meta: &api.Meta{},
-// 		},
-// 		// Imported: frrImported,
-// 		Imported: api.Routes{}, // TODO imported routes
-// 		Filtered: api.Routes{}, // TODO filtered routes
-// 	}
-
-// 	return response, nil
-// }

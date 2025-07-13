@@ -37,19 +37,10 @@ func (m *LockMap) Unlock(key string) {
 	mutex.(*sync.Mutex).Unlock()
 }
 
-// PeerHashWithASAndAddress creates a peer hash (sha1) from
-// the ASN and the address.
-func PeerHashWithASAndAddress(asn uint32, address string) string {
+// PeerHash creates a peer hash by its config.ID and neighbor address
+func PeerHash(configID string, address string) string {
 	h := sha1.New()
-	io.WriteString(h, fmt.Sprintf("%v", asn))
-	io.WriteString(h, address)
-	sum := h.Sum(nil)
-	return fmt.Sprintf("%x", sum[0:5])
-}
-
-// PeerHash creates a peer hash by its neighbor address
-func PeerHash(address string) string {
-	h := sha1.New()
+	io.WriteString(h, configID)
 	io.WriteString(h, address)
 	sum := h.Sum(nil)
 	return fmt.Sprintf("%x", sum[0:5])
