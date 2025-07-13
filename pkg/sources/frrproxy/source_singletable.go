@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/alice-lg/alice-lg/pkg/api"
+	"github.com/alice-lg/alice-lg/pkg/pools"
 )
 
 // SingleTableFrrProxy is an Alice source
@@ -50,12 +51,12 @@ func (src *SingleTableFrrProxy) Neighbors(
 
 		if !exists {
 			neighbor = api.Neighbor{
-				ID:             PeerHash(info.RemoteAs, ip),
+				ID:             PeerHash(ip),
 				Address:        ip,
 				ASN:            int(info.RemoteAs),
 				State:          info.State(),
 				Description:    info.NbrDesc,
-				RoutesReceived: info.RoutesAccepted(), // TODO - there is no received total without querying for each neighbor
+				RoutesReceived: info.RoutesAccepted(), // TODO - there is no received total without querying each neighbor
 				RoutesFiltered: info.RoutesFiltered(),
 				RoutesExported: info.RoutesExported(),
 				RoutesAccepted: info.RoutesAccepted(),
@@ -73,8 +74,6 @@ func (src *SingleTableFrrProxy) Neighbors(
 		neighbor := n
 		response.Neighbors = append(response.Neighbors, &neighbor)
 	}
-
-	log.Printf("Neighbors length: %d", len(response.Neighbors))
 
 	return &response, nil
 }
@@ -112,9 +111,9 @@ func (src *SingleTableFrrProxy) NeighborsStatus(
 		return nil, err
 	}
 
-	for ip, peer := range bgpSummary.Peers {
+	for ip, _ := range bgpSummary.Peers {
 		ns := api.NeighborStatus{}
-		ns.ID = PeerHash(peer.RemoteAs, ip)
+		ns.ID = PeerHash(ip)
 		ns.State = "up" // TODO
 		ns.Since = 5 * time.Second
 
@@ -154,9 +153,9 @@ func (src *SingleTableFrrProxy) Status(context.Context) (*api.StatusResponse, er
 	// panic("unimplemented")
 	response := api.StatusResponse{}
 	response.Meta = &api.Meta{}
-	response.Status.ServerTime = time.Now()   // TODO
-	response.Status.LastReboot = time.Now()   // TODO
-	response.Status.LastReconfig = time.Now() // TODO
+	// response.Status.ServerTime = time.Now()   // TODO
+	// response.Status.LastReboot = time.Now()   // TODO
+	// response.Status.LastReconfig = time.Now() // TODO
 	response.Status.Message = "status-message"
 	response.Status.RouterID = "1.2.3.4"
 	response.Status.Version = "version-string-here"
@@ -184,7 +183,7 @@ func (src *SingleTableFrrProxy) AllRoutes(
 
 	// Fetch routes from the configured "main_table" for the configured AFI
 	// Imported
-	res, err := src.client.RunCommand(ctx, "bgpd", "show bgp vrf "+mainTable+" "+src.client.afi)
+	res, err := src.client.RunCommand(ctx, "bgpd", "show bgp vrf "+mainTable+" "+src.client.afi+" detail-routes")
 	if err != nil {
 		return nil, err
 	}
@@ -202,19 +201,61 @@ func (src *SingleTableFrrProxy) AllRoutes(
 		return nil, err
 	}
 
-	// for prefix, _ := range data.Routes {
-	// 	log.Printf("Prefix: %s", prefix)
+	for prefix, routeData := range data.Routes {
+		// log.Printf("Prefix: %s", prefix)
 
-	// 	// route := api.Route{}
+		for _, data := range routeData {
+			if data.Peer.PeerID == "::" {
+				// Do not process imported routes
+				continue
+			}
 
-	// 	for _, data := range routeData {
-	// 		if data.Bestpath {
-	// 			log.Printf("BestPath: %t", data.Bestpath)
-	// 		}
-	// 	}
+			route := api.Route{}
+			route.Network = prefix
+			route.Interface = pools.Interfaces.Acquire("unknown")
+			route.BGP = &api.BGPInfo{}
+			route.Type = pools.Types.Acquire([]string{"BGP"})
 
-	// 	// importedRoutes = append(importedRoutes, &route)
-	// }
+			route.NeighborID = pools.Neighbors.Acquire(
+				PeerHash(data.Peer.PeerID))
+
+			// Age
+			epoch := data.LastUpdate.Epoch
+			then := time.Unix(int64(epoch), 0)
+			route.Age = time.Since(then)
+
+			if data.Bestpath.Overall {
+				route.Primary = true
+			} else {
+				route.Primary = false
+			}
+
+			origin := data.Origin
+
+			route.BGP.Origin = &origin
+			route.BGP.AsPath = data.AsPath.List()
+
+			for _, nexthop := range data.Nexthops {
+				if nexthop.IP != "::" {
+					nh := nexthop
+					route.Gateway = &nh.IP
+					route.BGP.NextHop = &nh.IP
+				}
+			}
+
+			route.BGP.Communities = make(api.Communities, 0)       // TODO
+			route.BGP.LargeCommunities = make(api.Communities, 0)  // TODO
+			route.BGP.ExtCommunities = make(api.ExtCommunities, 0) // TODO
+			route.BGP.LocalPref = data.LocPrf
+			route.BGP.Med = data.Metric
+
+			route.Metric = data.Metric
+
+			if route.NeighborID != nil {
+				importedRoutes = append(importedRoutes, &route)
+			}
+		}
+	}
 
 	// Filtered (need to hit every neighbor's "filtered" routes)
 	// TODO

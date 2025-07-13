@@ -1,5 +1,10 @@
 package frrproxy
 
+import (
+	"strconv"
+	"strings"
+)
+
 // Parsing for `show bgp vrf <table> [ipv4|ipv6] json`
 
 type BgpRouteData struct {
@@ -7,8 +12,14 @@ type BgpRouteData struct {
 }
 
 type BgpRoute struct {
-	Bestpath bool `json:"bestpath"`
-	Metric   int  `json:"metric"`
+	AsPath     AsPath     `json:"asPath"`
+	Origin     string     `json:"origin"`
+	Bestpath   BestPath   `json:"bestpath"`
+	Metric     int        `json:"metric"`
+	LocPrf     int        `json:"locPrf"`
+	LastUpdate LastUpdate `json:"lastUpdate"`
+	Nexthops   []Nexthop  `json:"nexthops"`
+	Peer       Peer       `json:"peer"`
 
 	// interface
 	// gateway
@@ -22,6 +33,39 @@ type BgpRoute struct {
 	// Details // original json raw message
 }
 
-type BgpRouteNextHop struct {
-	Ip string `json:"ip"`
+type AsPath struct {
+	String string `json:"string"`
+}
+
+func (a AsPath) List() []int {
+	var list []int
+
+	parts := strings.Split(a.String, " ")
+
+	for _, p := range parts {
+		n, err := strconv.ParseUint(p, 10, 32)
+		if err != nil {
+			// handle error (skip, log, etc.)
+			continue
+		}
+		list = append(list, int(n))
+	}
+
+	return list
+}
+
+type BestPath struct {
+	Overall bool `json:"overall"`
+}
+
+type LastUpdate struct {
+	Epoch int `json:"epoch"`
+}
+
+type Nexthop struct {
+	IP string `json:"ip"`
+}
+
+type Peer struct {
+	PeerID string `json:"peerId"`
 }
