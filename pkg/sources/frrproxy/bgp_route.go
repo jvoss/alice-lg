@@ -12,15 +12,18 @@ type BgpRouteData struct {
 }
 
 type BgpRoute struct {
-	ImportedFrom string     `json:"importedFrom"`
-	AsPath       AsPath     `json:"asPath"`
-	Origin       string     `json:"origin"`
-	Bestpath     BestPath   `json:"bestpath"`
-	Metric       int        `json:"metric"`
-	LocPrf       int        `json:"locPrf"`
-	LastUpdate   LastUpdate `json:"lastUpdate"`
-	Nexthops     []Nexthop  `json:"nexthops"`
-	Peer         Peer       `json:"peer"`
+	ImportedFrom   string       `json:"importedFrom"`
+	AsPath         AsPath       `json:"asPath"`
+	Origin         string       `json:"origin"`
+	Bestpath       BestPath     `json:"bestpath"`
+	Metric         int          `json:"metric"`
+	LocPrf         int          `json:"locPrf"`
+	Community      Community    `json:"community"`
+	ExtCommunity   ExtCommunity `json:"extendedCommunity"`
+	LargeCommunity Community    `json:"largeCommunity"`
+	LastUpdate     LastUpdate   `json:"lastUpdate"`
+	Nexthops       []Nexthop    `json:"nexthops"`
+	Peer           Peer         `json:"peer"`
 
 	// interface
 	// gateway
@@ -57,6 +60,14 @@ func (a AsPath) List() []int {
 
 type BestPath struct {
 	Overall bool `json:"overall"`
+}
+
+type Community struct {
+	List []string `json:"list"`
+}
+
+type ExtCommunity struct {
+	String string `json:"string"`
 }
 
 type LastUpdate struct {

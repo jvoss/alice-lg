@@ -243,9 +243,9 @@ func (src *SingleTableFrrProxy) AllRoutes(
 				}
 			}
 
-			route.BGP.Communities = make(api.Communities, 0)       // TODO
-			route.BGP.LargeCommunities = make(api.Communities, 0)  // TODO
-			route.BGP.ExtCommunities = make(api.ExtCommunities, 0) // TODO
+			route.BGP.Communities = parseBgpCommunityList(data.Community.List)
+			route.BGP.LargeCommunities = parseBgpCommunityList(data.LargeCommunity.List)
+			route.BGP.ExtCommunities = parseExtBgpCommunities(data.ExtCommunity.String)
 			route.BGP.LocalPref = data.LocPrf
 			route.BGP.Med = data.Metric
 
