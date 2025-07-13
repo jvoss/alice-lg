@@ -55,7 +55,7 @@ func (src *SingleTableFrrProxy) Neighbors(
 				ASN:            int(info.RemoteAs),
 				State:          info.State(),
 				Description:    info.NbrDesc,
-				RoutesReceived: info.RoutesAccepted(), // TODO - there is no received total without querying each neighbor
+				RoutesReceived: info.RoutesAccepted(), // TODO - there is no received total without querying for each neighbor
 				RoutesFiltered: info.RoutesFiltered(),
 				RoutesExported: info.RoutesExported(),
 				RoutesAccepted: info.RoutesAccepted(),
@@ -70,16 +70,58 @@ func (src *SingleTableFrrProxy) Neighbors(
 	}
 
 	for _, n := range neighborsResponse {
-		log.Printf("Neighbor IP: %s | Remote AS: %d | Uptime: %s | Accepted: %d | Exported: %d | Filtered: %d", n.Address, n.ASN, n.Uptime, n.RoutesAccepted, n.RoutesExported, n.RoutesFiltered)
-		response.Neighbors = append(response.Neighbors, &n)
+		neighbor := n
+		response.Neighbors = append(response.Neighbors, &neighbor)
 	}
+
+	log.Printf("Neighbors length: %d", len(response.Neighbors))
 
 	return &response, nil
 }
 
-// NeighborsStatus implements FrrProxy.
-func (src *SingleTableFrrProxy) NeighborsStatus(context.Context) (*api.NeighborsStatusResponse, error) {
-	panic("unimplemented")
+// NeighborsStatus retrievs all status information
+// for all peers on the RS.
+func (src *SingleTableFrrProxy) NeighborsStatus(
+	ctx context.Context,
+) (*api.NeighborsStatusResponse, error) {
+	log.Printf("I'm here.................TWO..............")
+	// panic("unimplemented")
+
+	log.Printf("NeighborsStatus")
+
+	mainTable := src.GenericFrrProxy.config.MainTable
+
+	response := api.NeighborsStatusResponse{}
+	response.Neighbors = make(api.NeighborsStatus, 0)
+
+	res, err := src.client.RunCommand(ctx, "bgpd", "show bgp vrf "+mainTable+" "+src.client.afi+" summary")
+	if err != nil {
+		return nil, err
+	}
+	defer res.Body.Close()
+
+	bodyBytes, err := io.ReadAll(res.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	var bgpSummary BgpSummary
+
+	err = json.Unmarshal(bodyBytes, &bgpSummary)
+	if err != nil {
+		return nil, err
+	}
+
+	for ip, peer := range bgpSummary.Peers {
+		ns := api.NeighborStatus{}
+		ns.ID = PeerHash(peer.RemoteAs, ip)
+		ns.State = "up" // TODO
+		ns.Since = 5 * time.Second
+
+		response.Neighbors = append(response.Neighbors, &ns)
+	}
+
+	return &response, nil
 }
 
 // NeighborsSummary implements FrrProxy.
@@ -109,15 +151,85 @@ func (src *SingleTableFrrProxy) RoutesReceived(ctx context.Context, neighborID s
 
 // Status implements FrrProxy.
 func (src *SingleTableFrrProxy) Status(context.Context) (*api.StatusResponse, error) {
-	panic("unimplemented")
+	// panic("unimplemented")
+	response := api.StatusResponse{}
+	response.Meta = &api.Meta{}
+	response.Status.ServerTime = time.Now()   // TODO
+	response.Status.LastReboot = time.Now()   // TODO
+	response.Status.LastReconfig = time.Now() // TODO
+	response.Status.Message = "status-message"
+	response.Status.RouterID = "1.2.3.4"
+	response.Status.Version = "version-string-here"
+	response.Status.Backend = "frr-proxy"
+
+	// response := api.StatusResponse{
+	// 	Response: api.Response{
+	// 		Meta: &api.Meta{},
+	// 	},
+	// 	Status: api.Status{},
+	// }
+
+	return &response, nil
 }
 
-// AllRoutes implements FrrProxy.
-func (src *SingleTableFrrProxy) AllRoutes(context.Context) (*api.RoutesResponse, error) {
-	panic("unimplemented")
+// AllRoutes retrieves a route dump (accepted; not including filtered)
+// which is used to learn all prefixes to build
+// up a local store for searching.
+func (src *SingleTableFrrProxy) AllRoutes(
+	ctx context.Context,
+) (*api.RoutesResponse, error) {
+	mainTable := src.GenericFrrProxy.config.MainTable
+
+	importedRoutes := api.Routes{}
+
+	// Fetch routes from the configured "main_table" for the configured AFI
+	// Imported
+	res, err := src.client.RunCommand(ctx, "bgpd", "show bgp vrf "+mainTable+" "+src.client.afi)
+	if err != nil {
+		return nil, err
+	}
+	defer res.Body.Close()
+
+	bodyBytes, err := io.ReadAll(res.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	var data BgpRouteData
+
+	err = json.Unmarshal(bodyBytes, &data)
+	if err != nil {
+		return nil, err
+	}
+
+	// for prefix, _ := range data.Routes {
+	// 	log.Printf("Prefix: %s", prefix)
+
+	// 	// route := api.Route{}
+
+	// 	for _, data := range routeData {
+	// 		if data.Bestpath {
+	// 			log.Printf("BestPath: %t", data.Bestpath)
+	// 		}
+	// 	}
+
+	// 	// importedRoutes = append(importedRoutes, &route)
+	// }
+
+	// Filtered (need to hit every neighbor's "filtered" routes)
+	// TODO
+
+	response := &api.RoutesResponse{
+		Response: api.Response{
+			Meta: &api.Meta{},
+		},
+		Imported: importedRoutes,
+		Filtered: api.Routes{}, // TODO
+	}
+
+	return response, nil
 }
 
-// AllRoutes retrieves a route dump
 // func (src *SingleTableFrrProxy) AllRoutes(
 // 	ctx context.Context,
 // ) (*api.RoutesResponse, error) {
