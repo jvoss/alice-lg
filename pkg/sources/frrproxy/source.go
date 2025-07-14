@@ -10,11 +10,10 @@ import (
 	"github.com/alice-lg/alice-lg/pkg/api"
 	"github.com/alice-lg/alice-lg/pkg/caches"
 	"github.com/alice-lg/alice-lg/pkg/pools"
-	"github.com/alice-lg/alice-lg/pkg/sources"
 )
 
 // Ensure source implements the interface
-var _FrrProxySource sources.Source = &FrrProxy{}
+// var _FrrProxySource sources.Source = &FrrProxy{}
 
 // FrrProxy is a source for Alice
 type FrrProxy struct {
@@ -111,7 +110,7 @@ func (src *FrrProxy) Neighbors(
 
 		if !exists {
 			neighbor = api.Neighbor{
-				ID:             PeerHash(src.config.ID, ip),
+				ID:             ip,
 				Address:        ip,
 				ASN:            int(info.RemoteAs),
 				State:          info.State(),
@@ -185,27 +184,189 @@ func (src *FrrProxy) NeighborsStatus(
 
 // NeighborsSummary implements FrrProxy.
 func (src *FrrProxy) NeighborsSummary(context.Context) (*api.NeighborsResponse, error) {
-	panic("unimplemented")
+	return &api.NeighborsResponse{}, nil
 }
 
 // Routes implements FrrProxy.
 func (src *FrrProxy) Routes(ctx context.Context, neighborID string) (*api.RoutesResponse, error) {
-	panic("unimplemented")
+	return &api.RoutesResponse{}, nil
 }
 
 // RoutesFiltered implements FrrProxy.
 func (src *FrrProxy) RoutesFiltered(ctx context.Context, neighborID string) (*api.RoutesResponse, error) {
-	panic("unimplemented")
+	vrf := src.config.Vrf
+
+	routes := api.Routes{}
+
+	// Fetch routes from the configured VRF for the configured AFI
+	res, err := src.client.RunCommand(ctx, "bgpd", "show bgp vrf "+vrf+" "+src.client.afi+" neighbor "+neighborID+" filtered-routes")
+	if err != nil {
+		return nil, err
+	}
+	defer res.Body.Close()
+
+	bodyBytes, err := io.ReadAll(res.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	var data BgpNeighborRoutes
+
+	err = json.Unmarshal(bodyBytes, &data)
+	if err != nil {
+		return nil, err
+	}
+
+	for prefix, routeData := range data.Routes {
+		// log.Printf("Prefix: %s", prefix)
+
+		for _, data := range routeData {
+			route := api.Route{}
+			route.Network = prefix
+			route.Interface = pools.Interfaces.Acquire("unknown")
+			route.BGP = &api.BGPInfo{}
+			route.Type = pools.Types.Acquire([]string{"BGP"})
+
+			route.NeighborID = pools.Neighbors.Acquire(neighborID)
+
+			// Age
+			// epoch := data.LastUpdate.Epoch
+			// then := time.Unix(int64(epoch), 0)
+			// route.Age = time.Since(then)
+
+			// if data.Bestpath.Overall {
+			// 	route.Primary = true
+			// } else {
+			// 	route.Primary = false
+			// }
+
+			origin := data.Origin
+
+			route.BGP.Origin = &origin
+			route.BGP.AsPath = data.AsPath()
+
+			for _, nexthop := range data.Nexthops {
+				if nexthop.IP != "::" {
+					nh := nexthop
+					route.Gateway = &nh.IP
+					route.BGP.NextHop = &nh.IP
+				}
+			}
+
+			// route.BGP.Communities = parseBgpCommunityList(data.Community.List)
+			// route.BGP.LargeCommunities = parseBgpCommunityList(data.LargeCommunity.List)
+			// route.BGP.ExtCommunities = parseExtBgpCommunities(data.ExtCommunity.String)
+			// route.BGP.LocalPref = data.LocPrf
+			// route.BGP.Med = data.Metric
+
+			// route.Metric = data.Metric
+
+			if route.NeighborID != nil {
+				routes = append(routes, &route)
+			}
+		}
+	}
+
+	response := &api.RoutesResponse{
+		Response: api.Response{
+			Meta: &api.Meta{},
+		},
+		Imported: nil,
+		Filtered: routes,
+	}
+
+	return response, nil
 }
 
 // RoutesNotExported implements FrrProxy.
 func (src *FrrProxy) RoutesNotExported(ctx context.Context, neighborID string) (*api.RoutesResponse, error) {
-	panic("unimplemented")
+	return &api.RoutesResponse{}, nil
 }
 
 // RoutesReceived implements FrrProxy.
 func (src *FrrProxy) RoutesReceived(ctx context.Context, neighborID string) (*api.RoutesResponse, error) {
-	panic("unimplemented")
+	vrf := src.config.Vrf
+
+	routes := api.Routes{}
+
+	// Fetch routes from the configured VRF for the configured AFI
+	res, err := src.client.RunCommand(ctx, "bgpd", "show bgp vrf "+vrf+" "+src.client.afi+" neighbor "+neighborID+" routes")
+	if err != nil {
+		return nil, err
+	}
+	defer res.Body.Close()
+
+	bodyBytes, err := io.ReadAll(res.Body)
+	if err != nil {
+		return nil, err
+	}
+
+	var data BgpNeighborRoutes
+
+	err = json.Unmarshal(bodyBytes, &data)
+	if err != nil {
+		return nil, err
+	}
+
+	for prefix, routeData := range data.Routes {
+		// log.Printf("Prefix: %s", prefix)
+
+		for _, data := range routeData {
+			route := api.Route{}
+			route.Network = prefix
+			route.Interface = pools.Interfaces.Acquire("unknown")
+			route.BGP = &api.BGPInfo{}
+			route.Type = pools.Types.Acquire([]string{"BGP"})
+
+			route.NeighborID = pools.Neighbors.Acquire(neighborID)
+
+			// Age
+			// epoch := data.LastUpdate.Epoch
+			// then := time.Unix(int64(epoch), 0)
+			// route.Age = time.Since(then)
+
+			// if data.Bestpath.Overall {
+			// 	route.Primary = true
+			// } else {
+			// 	route.Primary = false
+			// }
+
+			origin := data.Origin
+
+			route.BGP.Origin = &origin
+			route.BGP.AsPath = data.AsPath()
+
+			for _, nexthop := range data.Nexthops {
+				if nexthop.IP != "::" {
+					nh := nexthop
+					route.Gateway = &nh.IP
+					route.BGP.NextHop = &nh.IP
+				}
+			}
+
+			// route.BGP.Communities = parseBgpCommunityList(data.Community.List)
+			// route.BGP.LargeCommunities = parseBgpCommunityList(data.LargeCommunity.List)
+			// route.BGP.ExtCommunities = parseExtBgpCommunities(data.ExtCommunity.String)
+			// route.BGP.LocalPref = data.LocPrf
+			// route.BGP.Med = data.Metric
+
+			// route.Metric = data.Metric
+
+			if route.NeighborID != nil {
+				routes = append(routes, &route)
+			}
+		}
+	}
+
+	response := &api.RoutesResponse{
+		Response: api.Response{
+			Meta: &api.Meta{},
+		},
+		Imported: routes,
+		Filtered: api.Routes{}, // Caching of filter routes unsupported
+	}
+
+	return response, nil
 }
 
 // Status implements FrrProxy.
@@ -241,7 +402,7 @@ func (src *FrrProxy) AllRoutes(
 
 	importedRoutes := api.Routes{}
 
-	// Fetch routes from the configured "main_table" for the configured AFI
+	// Fetch routes from the configured VRF for the configured AFI
 	// Imported
 	res, err := src.client.RunCommand(ctx, "bgpd", "show bgp vrf "+vrf+" "+src.client.afi+" detail-routes")
 	if err != nil {
@@ -276,8 +437,7 @@ func (src *FrrProxy) AllRoutes(
 			route.BGP = &api.BGPInfo{}
 			route.Type = pools.Types.Acquire([]string{"BGP"})
 
-			route.NeighborID = pools.Neighbors.Acquire(
-				PeerHash(src.config.ID, data.Peer.PeerID))
+			route.NeighborID = pools.Neighbors.Acquire(data.Peer.PeerID)
 
 			// Age
 			epoch := data.LastUpdate.Epoch
@@ -317,15 +477,12 @@ func (src *FrrProxy) AllRoutes(
 		}
 	}
 
-	// Filtered (need to hit every neighbor's "filtered" routes)
-	// TODO
-
 	response := &api.RoutesResponse{
 		Response: api.Response{
 			Meta: &api.Meta{},
 		},
 		Imported: importedRoutes,
-		Filtered: api.Routes{}, // TODO
+		Filtered: api.Routes{}, // Caching of filter routes unsupported
 	}
 
 	return response, nil
